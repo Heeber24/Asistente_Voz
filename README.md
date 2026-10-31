@@ -52,7 +52,6 @@ Si el parse falla, **no** se inventa una respuesta: se explica el error (falta w
 - `asistente_voz/experto/hechos.py` — hechos de la petición actual (wake, verbo, objeto, alias de app, …).
 - `asistente_voz/experto/reglas.py` — reglas SI … ENTONCES … (aquí añaden más los estudiantes).
 - `asistente_voz/experto/motor.py` — elige la regla de mayor prioridad y ejecuta la acción registrada.
-- Prueba sin micrófono: `python scripts/probar_experto.py`.
 
 ### Síntesis de voz (respuesta hablada)
 
