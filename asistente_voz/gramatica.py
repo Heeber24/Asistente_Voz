@@ -173,6 +173,8 @@ def analizar_comando(
     try:
         arboles = list(_parser.parse(plantilla))
     except (ValueError, RuntimeError) as e:
+        # El detalle tecnico se queda en consola; al usuario le decimos algo simple
+        print(f"(Debug parser) {e}")
         return AnalisisSintactico(
             valido=False,
             tokens=tokens,
@@ -181,7 +183,7 @@ def analizar_comando(
             verbo=verbo,
             objeto_tokens=cola,
             codigo_error="ERROR_PARSER",
-            mensaje_error=f"El parser fallo: {e}",
+            mensaje_error="No pude entender esa peticion. Intentalo de nuevo con otra frase.",
         )
 
     # Si no salio ningun arbol, la frase no esta en el lenguaje de la CFG
