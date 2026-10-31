@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from asistente_voz.config import APPS_LEXICO
-from asistente_voz.gramatica import AnalisisSintactico
+from config import APPS_LEXICO
+from gramatica import AnalisisSintactico
 
 
 @dataclass

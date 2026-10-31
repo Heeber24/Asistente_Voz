@@ -1,32 +1,128 @@
 # Asistente de voz por comandos
 
-Asistente sencillo en Python: escucha (o lees el comando), valida la frase con una **gramática libre de contexto**, aplica **reglas de un sistema experto** y responde con voz.
+Aplicación en Python que funciona como un **asistente virtual sencillo**: escucha instrucciones (o las lees por teclado), valida que la frase tenga una estructura correcta con una **gramática libre de contexto (CFG)**, aplica **reglas de un sistema experto** y ejecuta acciones concretas (YouTube, Google, abrir programas), respondiendo con **voz sintética**.
 
-No usa LLM. Si la frase no parsea, no inventa respuesta.
+La idea didáctica es mostrar cómo se arma un asistente “de la vieja escuela”:
 
-## Flujo
+- **No usa un LLM** para inventar respuestas.
+- Solo actúa si el **analizador sintáctico** acepta la frase según nuestras reglas.
+- Después del parseo, un **motor de inferencia** decide qué hacer con reglas del tipo  
+  *SI el parse es válido Y el verbo es X Y el objeto cumple Y → ENTONCES ejecuta Z*.
 
-1. Escuchar / leer texto  
-2. Normalizar y tokenizar  
-3. Analizar con la CFG (NLTK) → árbol sintáctico  
-4. Armar hechos y disparar una regla SI … ENTONCES …  
-5. Ejecutar acción (YouTube, Google, abrir app) y hablar  
+Así se entiende la diferencia entre un asistente actual apoyado en modelos grandes y un sistema con reglas rígidas (como un sistema experto clásico).
 
-## Requisitos
+---
 
-- Windows (recomendado para la demo: rutas de apps y TTS).  
-- **Python 3.12** de preferencia.  
-  En 3.13/3.14 `PyAudio` suele fallar al instalarse. Con 3.12 casi siempre entra bien.  
-- Internet (el reconocimiento de voz usa Google).  
-- Opcional: [uv](https://github.com/astral-sh/uv) para crear el entorno fácil.
+## ¿Para qué sirve?
+
+- Automatizar comandos de voz/texto: reproducir, buscar, abrir apps.
+- Practicar en un solo proyecto: reconocimiento de voz, síntesis de voz, CFG y reglas.
+- Servir de base para que los alumnos agreguen más verbos, más apps y más reglas.
+
+---
+
+## Cómo funciona (pipeline)
+
+1. **Percibir** — micrófono → texto (Google STT) **o** texto escrito en consola.  
+2. **Normalizar** — minúsculas, sin acentos, tokens.  
+3. **Analizar (CFG)** — NLTK `ChartParser`. Si no hay árbol válido → error amigable, no inventa.  
+4. **Inferir (experto)** — se arman *hechos* y se evalúan *reglas SI…ENTONCES…*.  
+5. **Actuar** — YouTube / Google / abrir app + respuesta por TTS.
+
+```text
+voz o teclado
+    → STT / texto
+    → normalize + tokens
+    → gramática CFG (árbol)
+    → hechos
+    → reglas / motor
+    → acción + voz
+```
+
+---
+
+## Librerías y para qué se usan
+
+| Librería | Para qué |
+|----------|----------|
+| **SpeechRecognition** | Captura audio y lo manda a reconocimiento (aquí: Google). |
+| **PyAudio** | Permite usar el **micrófono** desde Python. Sin esto no hay modo voz. |
+| **NLTK** | Define y parsea la **gramática libre de contexto (CFG)**. |
+| **pyttsx3** | **Síntesis de voz** (texto → habla). En Windows puede apoyarse en SAPI. |
+| **pywin32** (opcional) | Acceso a **SAPI** por COM en Windows (voz del sistema). |
+| **pywhatkit** | Abre reproducción/búsqueda en **YouTube** y **Google**. |
+| **webbrowser** / **subprocess** | Respaldo del navegador y para lanzar `.exe` (Notepad, Word, Edge). |
+
+Declaradas en `requirements.txt`.
+
+---
+
+## Estructura del repositorio
+
+Todo el código del asistente vive en la **raíz** (sin carpeta intermedia duplicada):
+
+```text
+Asistente_Voz/
+├── Asistente_Voz_IA.py   # Arranque: python Asistente_Voz_IA.py
+├── agente.py             # Bucle principal (orquesta todo el pipeline)
+├── config.py             # Ajustes: idioma, mic, wake words, verbos, apps, rutas
+├── texto.py              # Normalizar, tokenizar, acomodar wake word
+├── gramatica.py          # CFG NLTK, árbol sintáctico, errores de parseo
+├── voz_stt.py            # Micrófono → texto (Speech-To-Text)
+├── voz_tts.py            # Texto → voz (Text-To-Speech)
+├── acciones.py           # Efectos: YouTube, Google, abrir programas
+├── experto/              # Sistema experto de la petición
+│   ├── hechos.py         # Base de hechos (qué sabemos de la frase)
+│   ├── reglas.py         # Reglas SI…ENTONCES… (aquí amplían los alumnos)
+│   └── motor.py          # Elige la regla y ejecuta la acción
+├── requirements.txt      # Dependencias
+├── README.md             # Este documento
+└── .gitignore
+```
+
+### Para qué sirve cada archivo
+
+| Archivo | Rol |
+|---------|-----|
+| `Asistente_Voz_IA.py` | Punto de entrada. Prepara el path y llama a `agente.main()`. |
+| `agente.py` | Une STT/texto → gramática → hechos → reglas → acción → TTS. |
+| `config.py` | Configuración central: `WAKE_WORDS`, `VERBOS`, apps, mic, TTS, rutas de Windows. |
+| `texto.py` | Limpia el texto del reconocedor o del teclado. |
+| `gramatica.py` | Arma la CFG, parsea, muestra el árbol o un mensaje de error claro. |
+| `voz_stt.py` | Escucha el micrófono y obtiene texto con Google. |
+| `voz_tts.py` | Habla la respuesta (SAPI en Windows o pyttsx3). |
+| `acciones.py` | Lo que “hace” el asistente en el sistema/navegador. |
+| `experto/hechos.py` | Traduce el parseo a hechos (`verbo`, `objeto`, `alias_app`, …). |
+| `experto/reglas.py` | Lista de reglas de producción. |
+| `experto/motor.py` | Evalúa reglas por prioridad y dispara la acción. |
+
+---
+
+## Por qué crear un entorno virtual (`.venv`)
+
+Un **entorno virtual** aísla las librerías de **este** proyecto para no mezclarlas con el Python global de tu PC ni con otros trabajos.
+
+| Si creas el `.venv` | Si no lo creas |
+|---------------------|----------------|
+| Las dependencias quedan solo en la carpeta del proyecto | `pip install` puede romper o mezclar versiones de otros proyectos |
+| Todos usan las mismas libs del `requirements.txt` | En otra máquina “a mí me jala” y a ti no |
+| Puedes usar **Python 3.12 solo para este asistente** | Chocas con tu Python global (por ejemplo 3.14) |
+
+**Importante:** el `.venv` **no reemplaza** tu Python global. Tu 3.14 (u otra versión) sigue igual; este proyecto trabaja dentro de su propio entorno.
+
+### Preferir Python 3.12
+
+Para que **PyAudio** (micrófono) se instale bien en Windows, usa **Python 3.12** en el venv. En 3.13/3.14 suele fallar al compilar.
+
+---
 
 ## Cómo armar el entorno (VS Code / PowerShell)
 
-Abre la carpeta del repo en Visual Studio Code y usa la terminal integrada.
+Abre la carpeta del repo en Visual Studio Code → terminal integrada.
 
 ### 1) Crear el entorno con Python 3.12
 
-Con `uv` (recomendado; no te cambia el Python global, solo el `.venv` del proyecto):
+Con [uv](https://github.com/astral-sh/uv) (recomendado):
 
 ```powershell
 uv venv --python 3.12 .venv
@@ -34,9 +130,9 @@ uv venv --python 3.12 .venv
 python --version
 ```
 
-Debe salir algo como `Python 3.12.x`.
+Debe decir `Python 3.12.x`.
 
-Si `uv` no está, puedes usar el launcher de Windows (con 3.12 ya instalado en la PC):
+Sin `uv` (si ya tienes 3.12 instalado en la PC):
 
 ```powershell
 py -3.12 -m venv .venv
@@ -44,9 +140,9 @@ py -3.12 -m venv .venv
 python --version
 ```
 
-### 2) Asegurar pip e instalar dependencias
+### 2) Pip e instalación de librerías
 
-En algunos venvs creados con `uv`, pip no viene activo. Si hace falta:
+A veces el venv de `uv` no trae pip listo. Si hace falta:
 
 ```powershell
 python -m ensurepip --upgrade
@@ -54,24 +150,34 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Si `PyAudio` falla, revisa que el `python --version` del venv sea 3.12 (no 3.14).
+Si `PyAudio` falla, confirma que `python --version` dentro del venv sea **3.12**, no 3.14.
 
-### 3) Correr el asistente
+Opcional en Windows (voz SAPI):
 
-**Modo texto** (sin micrófono; útil para probar gramática y reglas):
+```powershell
+python -m pip install pywin32
+```
+
+---
+
+## Cómo correr el asistente
+
+Con el `(.venv)` activado:
+
+### Modo solo texto (sin micrófono)
+
+Ideal para clase, depurar la gramática o si PyAudio no instaló:
 
 ```powershell
 $env:ASISTENTE_TEXTO = "1"
 python Asistente_Voz_IA.py
 ```
 
-Cuando aparezca `Comando >`, escribe por ejemplo:
+Cuando aparezca `Comando >`, escribes la frase y Enter.
 
-```text
-alexa reproduce luis miguel
-```
+### Modo voz (micrófono)
 
-**Modo voz** (necesita micrófono + PyAudio + internet):
+Necesitas PyAudio, micrófono e internet:
 
 ```powershell
 python Asistente_Voz_IA.py
@@ -79,7 +185,7 @@ python Asistente_Voz_IA.py
 
 Para salir: `Ctrl+C`.
 
-### Si el micrófono no es el correcto
+### Elegir micrófono
 
 ```powershell
 python -c "import speech_recognition as sr; [print(i, n) for i, n in enumerate(sr.Microphone.list_microphone_names())]"
@@ -89,43 +195,54 @@ python Asistente_Voz_IA.py
 
 (cambia `3` por el índice de tu mic)
 
-## Ejemplos
+---
+
+## Palabras y ejemplos que entiende
+
+La frase, después de normalizar, debe ir así:
+
+**palabra de activación + verbo + complemento**
+
+| Pieza | Valores |
+|-------|---------|
+| Activación | `alexa`, `siri`, `google`, `cortana` |
+| Verbos abiertos | `reproduce` / `reproducir`, `busca` / `buscar` (después puede ir cualquier texto) |
+| Verbos de app | `abre` / `abrir` / `inicia` |
+| Apps | `notepad`, `word`, `edge`, `documento` (opcional: `el`, `la`, …) |
+
+Ejemplos válidos:
 
 - `alexa reproduce luis miguel`
 - `siri busca tutorial python`
 - `google abre el notepad`
 - `cortana abre edge`
 
-## Estructura
+Si no cuadra con la gramática, el asistente **no inventa**: avisa y pide intentar otra petición.
 
-```
-Asistente_Voz_IA.py      # entrada
-asistente_voz/
-  agente.py              # bucle principal
-  config.py              # wake words, verbos, apps, mic, etc.
-  gramatica.py           # CFG + árbol
-  texto.py               # normalizar / tokenizar
-  voz_stt.py             # microfono -> texto
-  voz_tts.py             # texto -> voz
-  acciones.py            # YouTube / Google / apps
-  experto/
-    hechos.py            # base de hechos
-    reglas.py            # reglas SI...ENTONCES (ampliar aqui)
-    motor.py             # elige y ejecuta la regla
-requirements.txt
-README.md
-```
+---
 
 ## Ampliar en clase
 
-1. Léxico: `asistente_voz/config.py` (`WAKE_WORDS`, `VERBOS`, `APPS_LEXICO`)  
-2. Regla nueva: `asistente_voz/experto/reglas.py`  
-3. Acción nueva: `acciones.py` + registrarla en `experto/motor.py`  
+1. **Léxico / CFG:** `WAKE_WORDS`, `VERBOS`, `APPS_LEXICO` en `config.py` (la gramática se regenera sola).  
+2. **Regla nueva:** agrega un `Regla(...)` en `experto/reglas.py`.  
+3. **Acción nueva:** impleméntala en `acciones.py` y regístrala en `experto/motor.py` → `ACCIONES`.  
 
-## Notas rápidas
+No hace falta meter `if/elif` nuevos en `agente.py`: el motor elige la regla.
 
-- El reconocimiento usa Google (`recognize_google`), necesita internet.  
-- En Windows el TTS intenta SAPI; si falla, usa pyttsx3.  
-- `reproduce` / `busca` aceptan cualquier texto después del verbo (objeto abierto).  
-- `abre` solo acepta apps del léxico cerrado.  
-- Tu Python global (por ejemplo 3.14) no se toca: el proyecto vive en `.venv` con 3.12.  
+---
+
+## Privacidad
+
+En modo voz, el audio se envía a Google para obtener el texto. En modo `ASISTENTE_TEXTO=1` no se usa el micrófono.
+
+---
+
+## Problemas frecuentes
+
+| Síntoma | Qué hacer |
+|---------|-----------|
+| `python` no se reconoce | Usa `py` o el Python del `.venv` activado. |
+| PyAudio no instala | Usa **Python 3.12** en el venv; o trabaja en modo texto. |
+| No escucha | Lista micros y fija `ASISTENTE_MIC_INDEX`. |
+| Sin voz de salida | Instala `pywin32` o deja que use pyttsx3. |
+| “No entendí / gramática” | Revisa wake word al inicio, verbo permitido y, si es `abre`, una app del léxico. |

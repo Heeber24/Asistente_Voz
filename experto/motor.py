@@ -15,14 +15,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from asistente_voz.acciones import (
+from acciones import (
     ejecutar_abrir_aplicacion,
     ejecutar_busqueda_google,
     ejecutar_reproducir_youtube,
 )
-from asistente_voz.config import MOSTRAR_HECHOS
-from asistente_voz.experto.hechos import HechosComando
-from asistente_voz.experto.reglas import REGLAS, Regla
+from config import MOSTRAR_HECHOS
+from experto.hechos import HechosComando
+from experto.reglas import REGLAS, Regla
 
 # Tipo del callback que habla (normalmente GeneradorVoz.generar_voz)
 Hablar = Callable[[str], None]

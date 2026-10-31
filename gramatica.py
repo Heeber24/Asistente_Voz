@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 import nltk
 from nltk.tree import Tree
 
-from asistente_voz.config import (
+from config import (
     APPS_LEXICO,
     DETERMINANTES,
     MOSTRAR_ARBOL,

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import speech_recognition as sr
 
-from asistente_voz.config import (
+from config import (
     LANGUAGE_STT,
     LISTEN_TIMEOUT_S,
     MIC_DEVICE_INDEX,

@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from asistente_voz.experto.hechos import HechosComando
+from experto.hechos import HechosComando
 
 
 @dataclass(frozen=True)

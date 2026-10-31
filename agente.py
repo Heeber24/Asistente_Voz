@@ -20,14 +20,14 @@
 
 from __future__ import annotations
 
-from asistente_voz.config import LISTAR_REGLAS, VERBOS, WAKE_WORDS, env_si
-from asistente_voz.experto.hechos import hechos_desde_analisis
-from asistente_voz.experto.motor import ejecutar_resultado, inferir
-from asistente_voz.experto.reglas import listar_reglas
-from asistente_voz.gramatica import analizar_comando
-from asistente_voz.texto import normalize, poner_wake_word_primera, tokenizar
-from asistente_voz.voz_stt import ReconocimientoVoz
-from asistente_voz.voz_tts import GeneradorVoz
+from config import LISTAR_REGLAS, VERBOS, WAKE_WORDS, env_si
+from experto.hechos import hechos_desde_analisis
+from experto.motor import ejecutar_resultado, inferir
+from experto.reglas import listar_reglas
+from gramatica import analizar_comando
+from texto import normalize, poner_wake_word_primera, tokenizar
+from voz_stt import ReconocimientoVoz
+from voz_tts import GeneradorVoz
 
 
 def procesar_comando(comando: str, voz: GeneradorVoz) -> None:
