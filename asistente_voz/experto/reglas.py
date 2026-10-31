@@ -1,9 +1,14 @@
-# Reglas tipo sistema experto:
+# Reglas de produccion del sistema experto.
+# Formato clasico:
 #   SI se cumplen las condiciones ENTONCES disparo esta accion
 #
-# Para agregar algo nuevo en clase:
-# 1) pega otra Regla en la lista REGLAS
-# 2) si la accion es nueva, registrala en motor.py (diccionario ACCIONES)
+# Ejemplo:
+#   SI parse_valido Y verbo=reproduce Y hay objeto
+#   ENTONCES reproducir_youtube
+#
+# Para ampliar en clase:
+#   1) agrega otra Regla a la lista REGLAS
+#   2) si la accion es nueva, registrala en motor.py (diccionario ACCIONES)
 
 from __future__ import annotations
 
@@ -17,16 +22,20 @@ from asistente_voz.experto.hechos import HechosComando
 class Regla:
     id: str
     descripcion: str
+    # condiciones es una funcion que recibe hechos y regresa True/False
     condiciones: Callable[[HechosComando], bool]
+    # nombre de la accion (tiene que existir en motor.ACCIONES)
     accion: str
-    prioridad: int = 10  # gana la de numero mas alto
+    # si varias reglas aplican, gana la de prioridad mas alta
+    prioridad: int = 10
 
 
 def _verbo_es(h: HechosComando, *ops: str) -> bool:
+    # Atajo para no repetir "h.verbo in (...)" en cada regla
     return h.verbo is not None and h.verbo in ops
 
 
-# Aqui estan las reglas. Mientras mas arriba en prioridad, primero se revisan.
+# Lista de reglas. El motor las ordena por prioridad (de mayor a menor).
 REGLAS: list[Regla] = [
     Regla(
         id="reproducir_youtube",
@@ -70,9 +79,11 @@ REGLAS: list[Regla] = [
         accion="pedir_aplicacion",
         prioridad=90,
     ),
+    # Esta va al final a proposito (prioridad baja).
+    # Si el parse esta bien pero ninguna regla de arriba aplico, avisamos.
     Regla(
         id="verbo_sin_accion",
-        descripcion="SI parse ok pero nadie mas aplazo -> avisar",
+        descripcion="SI parse ok pero nadie mas aplico -> avisar",
         condiciones=lambda h: h.parse_valido and h.verbo is not None,
         accion="verbo_sin_accion",
         prioridad=1,
@@ -81,6 +92,7 @@ REGLAS: list[Regla] = [
 
 
 def listar_reglas() -> None:
+    # Imprime las reglas al arrancar (sirve para la demo en clase)
     print("\n--- Reglas cargadas ---")
     for r in sorted(REGLAS, key=lambda x: (-x.prioridad, x.id)):
         print(f"  [{r.prioridad}] {r.id}: {r.descripcion}")

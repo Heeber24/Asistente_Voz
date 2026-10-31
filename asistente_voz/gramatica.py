@@ -1,6 +1,14 @@
-# Gramatica libre de contexto (CFG) con NLTK.
-# La idea: si la frase no encaja en estas reglas, el asistente NO inventa nada.
-# Solo responde cuando el parseo sale bien.
+# Analizador sintactico con gramatica libre de contexto (CFG) usando NLTK.
+#
+# Idea del proyecto:
+#   - Si la frase NO encaja en la gramatica -> no inventamos respuesta
+#   - Si SI encaja -> armamos hechos y el sistema experto decide que hacer
+#
+# Flujo interno:
+#   1) Checar errores obvios (falta wake word, falta verbo, etc.)
+#   2) Armar una "plantilla" para el parser
+#   3) Pedirle al ChartParser que genere el arbol
+#   4) Si hay arbol, lo imprimimos para que se vea en clase
 
 from __future__ import annotations
 
@@ -21,7 +29,7 @@ from asistente_voz.config import (
 
 @dataclass
 class AnalisisSintactico:
-    # Lo que le pasamos despues a la base de hechos
+    # Resultado del analisis. Esto luego se convierte en hechos.
     valido: bool
     tokens: list[str] = field(default_factory=list)
     plantilla: list[str] = field(default_factory=list)
@@ -35,13 +43,19 @@ class AnalisisSintactico:
 
 
 def _alts(palabras) -> str:
-    # Arma 'alexa' | 'siri' | ... para pegarlo en el string de la CFG
+    # Convierte un set de palabras en: 'alexa' | 'siri' | 'google'
+    # Asi lo podemos pegar directo en el string de la CFG
     return " | ".join(f"'{p}'" for p in sorted(palabras))
 
 
 def construir_gramatica_texto() -> str:
-    # La CFG se arma desde config para no desalinear vocabulario a mano.
-    # OBJ (__objeto__) es el comodin para "reproduce X" / "busca Y".
+    # Armamos la CFG leyendo el lexico de config.py
+    # Asi no tienes que editar dos lados cuando agregas un verbo o una app.
+    #
+    # Producciones en corto:
+    #   S   = wake + sintagma verbal
+    #   VP  = verbo solo | verbo + objeto libre | verbo + (el/la) + app
+    #   OBJ = comodin __objeto__ para "reproduce X" / "busca Y"
     return f"""
 S -> AV VP
 AV -> {_alts(WAKE_WORDS)}
@@ -53,14 +67,17 @@ OBJ -> '__objeto__'
 """.strip()
 
 
+# Parser global: se crea una vez al importar el modulo
 _parser = nltk.ChartParser(nltk.CFG.fromstring(construir_gramatica_texto()))
 
 
 def gramatica_actual() -> str:
+    # Por si quieres imprimir la CFG en consola
     return construir_gramatica_texto()
 
 
 def _indice_verbo(tokens: list[str]) -> int | None:
+    # Busca el primer verbo despues de la wake word
     for i, tok in enumerate(tokens[1:], start=1):
         if tok in VERBOS:
             return i
@@ -68,7 +85,9 @@ def _indice_verbo(tokens: list[str]) -> int | None:
 
 
 def _error_previo(tokens: list[str]) -> AnalisisSintactico | None:
-    # Revisamos lo obvio antes de llamar al parser (mensajes mas claros)
+    # Antes de llamar al parser revisamos fallos faciles.
+    # Asi el mensaje de error se entiende mejor en clase.
+
     if not tokens:
         return AnalisisSintactico(
             valido=False,
@@ -76,6 +95,7 @@ def _error_previo(tokens: list[str]) -> AnalisisSintactico | None:
             mensaje_error="No recibí ninguna palabra para analizar.",
         )
 
+    # Tiene que empezar con alexa / siri / google / cortana
     if tokens[0] not in WAKE_WORDS:
         wakes = ", ".join(sorted(WAKE_WORDS))
         return AnalisisSintactico(
@@ -85,6 +105,7 @@ def _error_previo(tokens: list[str]) -> AnalisisSintactico | None:
             mensaje_error=f"Empieza con una palabra de activacion ({wakes}).",
         )
 
+    # Despues de la wake word debe venir un verbo conocido
     vi = _indice_verbo(tokens)
     if vi is None:
         return AnalisisSintactico(
@@ -95,6 +116,7 @@ def _error_previo(tokens: list[str]) -> AnalisisSintactico | None:
             mensaje_error=f"No encontre un verbo conocido. Usa: {', '.join(sorted(VERBOS))}.",
         )
 
+    # reproduce/busca necesitan decir QUE reproducir o buscar
     verbo = tokens[vi]
     cola = tokens[vi + 1 :]
     if verbo in VERBOS_OBJETO_ABIERTO and not cola:
@@ -107,30 +129,47 @@ def _error_previo(tokens: list[str]) -> AnalisisSintactico | None:
             mensaje_error=f"Despues de «{verbo}» tienes que decir que reproducir o buscar.",
         )
 
+    # Si llegamos aqui, vale la pena intentar el parseo
     return None
 
 
 def _plantilla(tokens: list[str]) -> tuple[list[str], str, list[str]]:
-    # Para reproduce/busca no listamos cada cancion en la CFG:
-    # cambiamos la cola por __objeto__ y el parser solo checa la estructura.
+    # Prepara lo que realmente se le manda al parser.
+    #
+    # Caso abierto (reproduce / busca):
+    #   "alexa reproduce luis miguel"  ->  ["alexa", "reproduce", "__objeto__"]
+    # Asi no tenemos que meter todas las canciones del mundo en la CFG.
+    #
+    # Caso cerrado (abre):
+    #   se parsea tal cual, porque las apps SI estan en el lexico N
     vi = _indice_verbo(tokens)
     assert vi is not None
     verbo = tokens[vi]
     cola = tokens[vi + 1 :]
+
     if verbo in VERBOS_OBJETO_ABIERTO:
         return [tokens[0], verbo, "__objeto__"], verbo, cola
+
     return tokens, verbo, cola
 
 
-def analizar_comando(tokens: list[str], *, mostrar_arbol: bool | None = None) -> AnalisisSintactico:
-    # 1) errores faciles  2) armar plantilla  3) parsear  4) mostrar arbol
+def analizar_comando(
+    tokens: list[str],
+    *,
+    mostrar_arbol: bool | None = None,
+) -> AnalisisSintactico:
+    # Funcion principal del modulo. La llama el agente.
+
+    # Paso 1: errores obvios
     previo = _error_previo(tokens)
     if previo is not None:
         return previo
 
+    # Paso 2: plantilla + verbo + cola
     plantilla, verbo, cola = _plantilla(tokens)
     wake = tokens[0]
 
+    # Paso 3: pedir arboles al ChartParser de NLTK
     try:
         arboles = list(_parser.parse(plantilla))
     except (ValueError, RuntimeError) as e:
@@ -145,6 +184,7 @@ def analizar_comando(tokens: list[str], *, mostrar_arbol: bool | None = None) ->
             mensaje_error=f"El parser fallo: {e}",
         )
 
+    # Si no salio ningun arbol, la frase no esta en el lenguaje de la CFG
     if not arboles:
         apps = ", ".join(sorted(APPS_LEXICO))
         return AnalisisSintactico(
@@ -161,9 +201,12 @@ def analizar_comando(tokens: list[str], *, mostrar_arbol: bool | None = None) ->
             ),
         )
 
+    # Paso 4: nos quedamos con el primer arbol y lo mostramos
     arbol = arboles[0]
     arbol_texto = arbol.pformat(margin=70)
-    if mostrar_arbol if mostrar_arbol is not None else MOSTRAR_ARBOL:
+
+    ver = MOSTRAR_ARBOL if mostrar_arbol is None else mostrar_arbol
+    if ver:
         print("\n--- Arbol sintactico ---")
         print(f"Original : {' '.join(tokens)}")
         print(f"Plantilla: {' '.join(plantilla)}")

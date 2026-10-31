@@ -1,7 +1,12 @@
-# Asistente de voz por comandos (Python). Ver README.md para entorno virtual y arranque.
-# Instalación (con el venv activado): pip install -r requirements.txt
-# Windows — si PyAudio falla al compilar: pip install pipwin && pipwin install pyaudio
-# Windows — TTS por SAPI/COM (opcional): pip install pywin32
+# Dependencias del asistente.
+# Con el venv activado: pip install -r requirements.txt
+#
+# Si PyAudio no instala en Windows:
+#   pip install pipwin
+#   pipwin install pyaudio
+#
+# Opcional en Windows para voz SAPI:
+#   pip install pywin32
 
 nltk>=3.8.1
 pyttsx3>=2.90
