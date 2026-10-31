@@ -12,7 +12,7 @@ import traceback
 
 import pyttsx3
 
-from asistente_voz.config import TTS_RATE, TTS_VOLUME, env_si
+from config import TTS_RATE, TTS_VOLUME, env_si
 
 
 def _sapi_rate() -> int:

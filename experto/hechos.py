@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from asistente_voz.config import APPS_LEXICO, VERBOS_OBJETO_ABIERTO
-from asistente_voz.gramatica import AnalisisSintactico
+from config import APPS_LEXICO, VERBOS_OBJETO_ABIERTO
+from gramatica import AnalisisSintactico
 
 
 def _alias_app_en_tokens(tokens: list[str]) -> str | None:

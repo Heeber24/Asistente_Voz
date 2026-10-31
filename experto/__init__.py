@@ -19,15 +19,15 @@ __all__ = [
 
 def __getattr__(name: str):
     if name in ("HechosComando", "hechos_desde_analisis"):
-        from asistente_voz.experto import hechos as _hechos
+        from experto import hechos as _hechos
 
         return getattr(_hechos, name)
     if name in ("ResultadoInferencia", "inferir"):
-        from asistente_voz.experto import motor as _motor
+        from experto import motor as _motor
 
         return getattr(_motor, name)
     if name == "REGLAS":
-        from asistente_voz.experto.reglas import REGLAS as _REGLAS
+        from experto.reglas import REGLAS as _REGLAS
 
         return _REGLAS
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
