@@ -10,7 +10,7 @@ import time
 
 import speech_recognition as sr
 
-from config import (
+from asistente_voz.config import (
     AMBIENT_NOISE_DURATION_S,
     AMBIENT_RECALIBRATE_EVERY,
     LANGUAGE_STT,

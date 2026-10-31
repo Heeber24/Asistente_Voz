@@ -12,7 +12,7 @@ import time
 import webbrowser
 from urllib.parse import quote_plus
 
-from config import ALIAS_ETIQUETA, APPS_LEXICO, resolver_ruta_aplicacion
+from asistente_voz.config import ALIAS_ETIQUETA, APPS_LEXICO, resolver_ruta_aplicacion
 
 
 def _youtube_url(q: str) -> str:

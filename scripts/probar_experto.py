@@ -20,11 +20,11 @@ os.environ.setdefault("ASISTENTE_MOSTRAR_ARBOL", "0")
 os.environ.setdefault("ASISTENTE_MOSTRAR_HECHOS", "0")
 os.environ.setdefault("ASISTENTE_LISTAR_REGLAS", "0")
 
-from config import VERBOS, WAKE_WORDS
-from experto.hechos import hechos_desde_analisis
-from experto.motor import inferir
-from gramatica import analizar_comando, gramatica_actual
-from texto import normalize, poner_wake_word_primera, tokenizar
+from asistente_voz.config import VERBOS, WAKE_WORDS
+from asistente_voz.experto.hechos import hechos_desde_analisis
+from asistente_voz.experto.motor import inferir
+from asistente_voz.gramatica import analizar_comando, gramatica_actual
+from asistente_voz.texto import normalize, poner_wake_word_primera, tokenizar
 
 
 def _pipeline(frase: str) -> str:

@@ -16,14 +16,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from acciones import (
+from asistente_voz.acciones import (
     ejecutar_abrir_aplicacion,
     ejecutar_busqueda_google,
     ejecutar_reproducir_youtube,
 )
-from config import MOSTRAR_HECHOS_INFERENCIA
-from experto.hechos import HechosComando
-from experto.reglas import REGLAS, Regla
+from asistente_voz.config import MOSTRAR_HECHOS_INFERENCIA
+from asistente_voz.experto.hechos import HechosComando
+from asistente_voz.experto.reglas import REGLAS, Regla
 
 
 @dataclass

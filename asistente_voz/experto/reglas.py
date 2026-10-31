@@ -6,7 +6,7 @@ Formato clásico:
 
 Para ampliar en clase:
 1. Añade un ``Regla(...)`` a la lista ``REGLAS`` (abajo).
-2. Si la acción es nueva, regístrala en ``experto.motor.ACCIONES``.
+2. Si la acción es nueva, regístrala en ``asistente_voz.experto.motor.ACCIONES``.
 3. Si necesitas un hecho nuevo, extiende ``HechosComando`` en ``hechos.py``.
 
 La prioridad más alta gana cuando varias reglas disparan a la vez.
@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from experto.hechos import HechosComando
+from asistente_voz.experto.hechos import HechosComando
 
 Condicion = Callable[[HechosComando], bool]
 

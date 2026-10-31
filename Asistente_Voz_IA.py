@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agente import main
+from asistente_voz.agente import main
 
 if __name__ == "__main__":
     main()
