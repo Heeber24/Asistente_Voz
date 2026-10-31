@@ -227,8 +227,6 @@ Si no cuadra con la gramática, el asistente **no inventa**: avisa y pide intent
 2. **Regla nueva:** agrega un `Regla(...)` en `experto/reglas.py`.  
 3. **Acción nueva:** impleméntala en `acciones.py` y regístrala en `experto/motor.py` → `ACCIONES`.  
 
-No hace falta meter `if/elif` nuevos en `agente.py`: el motor elige la regla.
-
 ---
 
 ## Privacidad
