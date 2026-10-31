@@ -16,8 +16,8 @@ Así se entiende la diferencia entre un asistente actual apoyado en modelos gran
 ## ¿Para qué sirve?
 
 - Automatizar comandos de voz/texto: reproducir, buscar, abrir apps.
-- Practicar en un solo proyecto: reconocimiento de voz, síntesis de voz, CFG y reglas.
-- Servir de base para que los alumnos agreguen más verbos, más apps y más reglas.
+- Practicar en un solo proyecto el reconocimiento de voz, síntesis de voz, CFG y reglas.
+- Servir de base para crear más verbos, más apps y más reglas.
 
 ---
 
@@ -25,7 +25,7 @@ Así se entiende la diferencia entre un asistente actual apoyado en modelos gran
 
 1. **Percibir** — micrófono → texto (Google STT) **o** texto escrito en consola.  
 2. **Normalizar** — minúsculas, sin acentos, tokens.  
-3. **Analizar (CFG)** — NLTK `ChartParser`. Si no hay árbol válido → error amigable, no inventa.  
+3. **Analizar (CFG)** — NLTK `ChartParser`. Si no hay árbol válido → error, no inventa.  
 4. **Inferir (experto)** — se arman *hechos* y se evalúan *reglas SI…ENTONCES…*.  
 5. **Actuar** — YouTube / Google / abrir app + respuesta por TTS.
 
