@@ -1,20 +1,6 @@
-"""Gramática libre de contexto (CFG) NLTK: validación y árbol sintáctico.
-
-Flujo didáctico
----------------
-1. El texto ya normalizado llega como lista de tokens.
-2. Se construye una *plantilla* de parseo (para verbos de objeto abierto
-   la cola se resume en el comodín ``__objeto__``; el resto se parsea literal).
-3. ``ChartParser`` intenta generar uno o más árboles. Si hay árbol → frase válida.
-4. Se imprime el árbol para que el estudiante vea cómo el parser estructura la frase.
-
-Ampliación en clase
--------------------
-- Añade terminales en ``config.WAKE_WORDS`` / ``VERBOS`` / ``APPS_LEXICO``.
-- O añade producciones a mano en ``_producciones_extra()`` si necesitas
-  patrones más ricos (p. ej. ``VP -> V PREP N``).
-La CFG se regenera desde la config para no desalinear vocabulario y reglas.
-"""
+# Gramatica libre de contexto (CFG) con NLTK.
+# La idea: si la frase no encaja en estas reglas, el asistente NO inventa nada.
+# Solo responde cuando el parseo sale bien.
 
 from __future__ import annotations
 
@@ -26,7 +12,7 @@ from nltk.tree import Tree
 from asistente_voz.config import (
     APPS_LEXICO,
     DETERMINANTES,
-    MOSTRAR_ARBOL_PARSE,
+    MOSTRAR_ARBOL,
     VERBOS,
     VERBOS_OBJETO_ABIERTO,
     WAKE_WORDS,
@@ -35,8 +21,7 @@ from asistente_voz.config import (
 
 @dataclass
 class AnalisisSintactico:
-    """Resultado del analizador sintáctico (lo que alimenta la base de hechos)."""
-
+    # Lo que le pasamos despues a la base de hechos
     valido: bool
     tokens: list[str] = field(default_factory=list)
     plantilla: list[str] = field(default_factory=list)
@@ -49,98 +34,67 @@ class AnalisisSintactico:
     mensaje_error: str | None = None
 
 
-def _alts(palabras: frozenset[str] | set[str] | list[str]) -> str:
+def _alts(palabras) -> str:
+    # Arma 'alexa' | 'siri' | ... para pegarlo en el string de la CFG
     return " | ".join(f"'{p}'" for p in sorted(palabras))
 
 
-def _producciones_extra() -> str:
-    """Hueco para que el estudiante añada producciones CFG a mano."""
-    return ""
-
-
 def construir_gramatica_texto() -> str:
-    """Arma el string CFG a partir de config (wake, verbos, apps, determinantes)."""
-    av = _alts(WAKE_WORDS)
-    v = _alts(VERBOS)
-    det = _alts(DETERMINANTES) if DETERMINANTES else "'el'"
-    apps = _alts(APPS_LEXICO) if APPS_LEXICO else "'notepad'"
-    extra = _producciones_extra().strip()
-    bloque_extra = f"\n{extra}" if extra else ""
-    # S  → wake + sintagma verbal
-    # VP → solo verbo | verbo + objeto abierto | verbo + (det) + app del léxico cerrado
-    # OBJ → comodín para consultas libres (YouTube / Google)
+    # La CFG se arma desde config para no desalinear vocabulario a mano.
+    # OBJ (__objeto__) es el comodin para "reproduce X" / "busca Y".
     return f"""
 S -> AV VP
-AV -> {av}
+AV -> {_alts(WAKE_WORDS)}
 VP -> V | V OBJ | V DET N | V N
-DET -> {det}
-N -> {apps}
-V -> {v}
+DET -> {_alts(DETERMINANTES)}
+N -> {_alts(APPS_LEXICO)}
+V -> {_alts(VERBOS)}
 OBJ -> '__objeto__'
-{bloque_extra}
 """.strip()
 
 
-def _cargar_parser() -> tuple[nltk.CFG, nltk.ChartParser]:
-    texto = construir_gramatica_texto()
-    cfg = nltk.CFG.fromstring(texto)
-    return cfg, nltk.ChartParser(cfg)
-
-
-_gramatica, _parser = _cargar_parser()
-
-
-def recargar_gramatica() -> None:
-    """Vuelve a leer la CFG (útil si en clase mutan config y quieren reintentar)."""
-    global _gramatica, _parser
-    _gramatica, _parser = _cargar_parser()
+_parser = nltk.ChartParser(nltk.CFG.fromstring(construir_gramatica_texto()))
 
 
 def gramatica_actual() -> str:
-    """Texto de la CFG vigente (para imprimir en consola / demos)."""
     return construir_gramatica_texto()
 
 
-def _indice_primer_verbo(tokens: list[str]) -> int | None:
+def _indice_verbo(tokens: list[str]) -> int | None:
     for i, tok in enumerate(tokens[1:], start=1):
         if tok in VERBOS:
             return i
     return None
 
 
-def _diagnosticar_antes_de_parsear(tokens: list[str]) -> AnalisisSintactico | None:
-    """Errores claros *antes* de invocar al ChartParser (mejor para el aula)."""
+def _error_previo(tokens: list[str]) -> AnalisisSintactico | None:
+    # Revisamos lo obvio antes de llamar al parser (mensajes mas claros)
     if not tokens:
         return AnalisisSintactico(
             valido=False,
             codigo_error="SIN_TOKENS",
             mensaje_error="No recibí ninguna palabra para analizar.",
         )
+
     if tokens[0] not in WAKE_WORDS:
-        muestra = " ".join(tokens[:12]) + ("…" if len(tokens) > 12 else "")
         wakes = ", ".join(sorted(WAKE_WORDS))
         return AnalisisSintactico(
             valido=False,
             tokens=tokens,
             codigo_error="FALTA_WAKE",
-            mensaje_error=(
-                f"La frase debe empezar con una palabra de activación ({wakes}). "
-                f"Transcripción: {muestra}"
-            ),
+            mensaje_error=f"Empieza con una palabra de activacion ({wakes}).",
         )
-    vi = _indice_primer_verbo(tokens)
+
+    vi = _indice_verbo(tokens)
     if vi is None:
-        verbos = ", ".join(sorted(VERBOS))
         return AnalisisSintactico(
             valido=False,
             tokens=tokens,
             wake=tokens[0],
             codigo_error="SIN_VERBO",
-            mensaje_error=(
-                f"Tras «{tokens[0]}» no hay un verbo reconocido. "
-                f"Verbos permitidos: {verbos}."
-            ),
+            mensaje_error=f"No encontre un verbo conocido. Usa: {', '.join(sorted(VERBOS))}.",
         )
+
     verbo = tokens[vi]
     cola = tokens[vi + 1 :]
     if verbo in VERBOS_OBJETO_ABIERTO and not cola:
@@ -150,17 +104,16 @@ def _diagnosticar_antes_de_parsear(tokens: list[str]) -> AnalisisSintactico | No
             wake=tokens[0],
             verbo=verbo,
             codigo_error="OBJETO_VACIO",
-            mensaje_error=(
-                f"El verbo «{verbo}» necesita un complemento "
-                f"(qué reproducir o qué buscar)."
-            ),
+            mensaje_error=f"Despues de «{verbo}» tienes que decir que reproducir o buscar.",
         )
+
     return None
 
 
-def _tokens_para_parser(tokens: list[str]) -> tuple[list[str], str, list[str]]:
-    """Devuelve (plantilla, verbo, cola_objeto)."""
-    vi = _indice_primer_verbo(tokens)
+def _plantilla(tokens: list[str]) -> tuple[list[str], str, list[str]]:
+    # Para reproduce/busca no listamos cada cancion en la CFG:
+    # cambiamos la cola por __objeto__ y el parser solo checa la estructura.
+    vi = _indice_verbo(tokens)
     assert vi is not None
     verbo = tokens[vi]
     cola = tokens[vi + 1 :]
@@ -169,50 +122,15 @@ def _tokens_para_parser(tokens: list[str]) -> tuple[list[str], str, list[str]]:
     return tokens, verbo, cola
 
 
-def _arbol_a_texto(arbol: Tree) -> str:
-    return arbol.pformat(margin=70)
-
-
-def _mensaje_fuera_de_gramatica(
-    tokens: list[str], plantilla: list[str], verbo: str, cola: list[str]
-) -> str:
-    desconocidos = [t for t in plantilla if t not in _vocabulario_terminal()]
-    if desconocidos:
-        return (
-            f"Hay palabras fuera del léxico de la gramática: {', '.join(desconocidos)}. "
-            f"Para «{verbo}» con apps usa: {', '.join(sorted(APPS_LEXICO))}."
-        )
-    if verbo not in VERBOS_OBJETO_ABIERTO and cola:
-        apps = ", ".join(sorted(APPS_LEXICO))
-        return (
-            f"La secuencia «{' '.join(tokens)}» no encaja en la CFG. "
-            f"Con «{verbo}» prueba un nombre del léxico cerrado ({apps}), "
-            f"opcionalmente con el/la/los/las."
-        )
-    return (
-        f"La frase no cuadra con la gramática libre de contexto programada "
-        f"(plantilla intentada: {' '.join(plantilla)})."
-    )
-
-
-def _vocabulario_terminal() -> set[str]:
-    outs: set[str] = set(WAKE_WORDS) | set(VERBOS) | set(APPS_LEXICO) | set(DETERMINANTES)
-    outs.add("__objeto__")
-    return outs
-
-
-def analizar_comando(
-    tokens: list[str],
-    *,
-    mostrar_arbol: bool | None = None,
-) -> AnalisisSintactico:
-    """Analiza la frase: diagnóstico → plantilla → ChartParser → árbol o error."""
-    previo = _diagnosticar_antes_de_parsear(tokens)
+def analizar_comando(tokens: list[str], *, mostrar_arbol: bool | None = None) -> AnalisisSintactico:
+    # 1) errores faciles  2) armar plantilla  3) parsear  4) mostrar arbol
+    previo = _error_previo(tokens)
     if previo is not None:
         return previo
 
-    plantilla, verbo, cola = _tokens_para_parser(tokens)
+    plantilla, verbo, cola = _plantilla(tokens)
     wake = tokens[0]
+
     try:
         arboles = list(_parser.parse(plantilla))
     except (ValueError, RuntimeError) as e:
@@ -224,10 +142,11 @@ def analizar_comando(
             verbo=verbo,
             objeto_tokens=cola,
             codigo_error="ERROR_PARSER",
-            mensaje_error=f"El analizador sintáctico falló: {e}",
+            mensaje_error=f"El parser fallo: {e}",
         )
 
     if not arboles:
+        apps = ", ".join(sorted(APPS_LEXICO))
         return AnalisisSintactico(
             valido=False,
             tokens=tokens,
@@ -236,20 +155,20 @@ def analizar_comando(
             verbo=verbo,
             objeto_tokens=cola,
             codigo_error="FUERA_DE_GRAMATICA",
-            mensaje_error=_mensaje_fuera_de_gramatica(tokens, plantilla, verbo, cola),
+            mensaje_error=(
+                f"La frase no cuadra con la gramatica. "
+                f"Si usas «abre», prueba: {apps}."
+            ),
         )
 
     arbol = arboles[0]
-    arbol_texto = _arbol_a_texto(arbol)
-    ver = mostrar_arbol if mostrar_arbol is not None else MOSTRAR_ARBOL_PARSE
-    if ver:
-        print("\n--- Árbol sintáctico (CFG / NLTK ChartParser) ---")
-        print(f"Tokens originales : {' '.join(tokens)}")
-        print(f"Plantilla parseada: {' '.join(plantilla)}")
+    arbol_texto = arbol.pformat(margin=70)
+    if mostrar_arbol if mostrar_arbol is not None else MOSTRAR_ARBOL:
+        print("\n--- Arbol sintactico ---")
+        print(f"Original : {' '.join(tokens)}")
+        print(f"Plantilla: {' '.join(plantilla)}")
         print(arbol_texto)
-        if len(arboles) > 1:
-            print(f"(Nota: el parser encontró {len(arboles)} árboles; se usa el primero.)")
-        print("--- fin árbol ---\n")
+        print("--- fin arbol ---\n")
 
     return AnalisisSintactico(
         valido=True,
@@ -261,8 +180,3 @@ def analizar_comando(
         arbol=arbol,
         arbol_texto=arbol_texto,
     )
-
-
-# Compatibilidad con el nombre anterior (bool). Preferir analizar_comando().
-def comando_valido_según_gramatica(tokens: list[str]) -> bool:
-    return analizar_comando(tokens, mostrar_arbol=False).valido

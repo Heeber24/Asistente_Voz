@@ -1,4 +1,5 @@
-"""Arranque del asistente. Desde la raíz del repo: python Asistente_Voz_IA.py"""
+# Arranque: python Asistente_Voz_IA.py
+# (desde la carpeta raiz del repo)
 
 from __future__ import annotations
 

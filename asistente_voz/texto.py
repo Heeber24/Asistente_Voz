@@ -1,9 +1,7 @@
-"""Limpieza del texto que viene del reconocedor (minúsculas, sin acentos, tokens)."""
+# Limpieza basica del texto que llega del reconocedor o del teclado.
+# Lo pasamos a minusculas, sin acentos y lo partimos en palabras (tokens).
 
 from __future__ import annotations
-
-# Google devuelve texto con mayúsculas y a veces acentos; normalize() lo deja estable para comparar con WAKE_WORDS y VERBOS.
-# tokenizar quita puntuación típica; poner_wake_word_primera corrige cuando el STT pone primero el verbo y luego la wake word.
 
 import string
 
@@ -17,9 +15,10 @@ def normalize(texto: str) -> str:
     return s
 
 
-def tokenizar(comando_normalizado: str) -> list[str]:
-    borde = string.punctuation + "¿¡«»"
-    return [t for t in (w.strip(borde) for w in comando_normalizado.split()) if t]
+def tokenizar(comando: str) -> list[str]:
+    # Quitamos signos raros que a veces mete el STT
+    basura = string.punctuation + "¿¡«»"
+    return [t for t in (w.strip(basura) for w in comando.split()) if t]
 
 
 def poner_wake_word_primera(
@@ -28,15 +27,15 @@ def poner_wake_word_primera(
     *,
     verbos: frozenset[str],
 ) -> list[str]:
-    """Si Google dice primero el verbo y luego Alexa/Siri/…, reordena para que el wake vaya primero."""
+    # A veces Google pone primero el verbo y luego "alexa".
+    # Aqui reordenamos para que la wake word quede al inicio.
     if not tokens or tokens[0] in wake_words:
         return tokens
     if tokens[0] not in verbos:
         return tokens
-    if len(tokens) >= 3 and tokens[1] == "google" and tokens[2] in ("busca", "buscar"):
-        return tokens
+
     for i, t in enumerate(tokens):
         if t in wake_words:
-            v0 = tokens[0]
-            return [tokens[i]] + [v0] + tokens[1:i] + tokens[i + 1 :]
+            verbo = tokens[0]
+            return [tokens[i], verbo] + tokens[1:i] + tokens[i + 1 :]
     return tokens

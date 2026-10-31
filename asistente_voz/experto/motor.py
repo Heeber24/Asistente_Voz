@@ -1,15 +1,7 @@
-"""Motor de inferencia: evalúa hechos contra reglas y dispara una acción.
-
-Estrategia (sencilla a propósito, para clase):
-- Recorre las reglas ordenadas por prioridad descendente.
-- La primera cuyo ``condiciones(hechos)`` sea verdadera gana (forward chaining
-  de un solo disparo por petición).
-- Si el parse falló, no se evalúan reglas de dominio: se responde el error
-  sintáctico.
-
-Así se valida de forma profesional el esquema:
-    parse válido ∧ verbo = X ∧ objeto cumple Y  →  ejecuta Z / responde W
-"""
+# Motor de inferencia bien simple:
+# 1) si el parse fallo -> error sintactico
+# 2) si no, revisa las reglas de mayor a menor prioridad
+# 3) la primera que cumpla gana y ejecutamos su accion
 
 from __future__ import annotations
 
@@ -21,119 +13,85 @@ from asistente_voz.acciones import (
     ejecutar_busqueda_google,
     ejecutar_reproducir_youtube,
 )
-from asistente_voz.config import MOSTRAR_HECHOS_INFERENCIA
+from asistente_voz.config import MOSTRAR_HECHOS
 from asistente_voz.experto.hechos import HechosComando
 from asistente_voz.experto.reglas import REGLAS, Regla
+
+Hablar = Callable[[str], None]
 
 
 @dataclass
 class ResultadoInferencia:
     regla: Regla | None
     accion: str
-    explicacion: str
     hechos: HechosComando
 
 
-Hablar = Callable[[str], None]
-
-
-def _reglas_ordenadas() -> list[Regla]:
-    return sorted(REGLAS, key=lambda r: (-r.prioridad, r.id))
-
-
 def inferir(hechos: HechosComando) -> ResultadoInferencia:
-    """Elige la acción a partir de los hechos (sin efectos secundarios)."""
     if not hechos.parse_valido:
-        msg = hechos.mensaje_error_sintactico or "La frase no es válida según la gramática."
-        return ResultadoInferencia(
-            regla=None,
-            accion="error_sintactico",
-            explicacion=msg,
-            hechos=hechos,
-        )
+        return ResultadoInferencia(None, "error_sintactico", hechos)
 
-    for regla in _reglas_ordenadas():
-        try:
-            dispara = bool(regla.condiciones(hechos))
-        except Exception as e:  # noqa: BLE001 — demo de aula: no tumbar el bucle
-            print(f"[motor] Regla {regla.id} lanzó error al evaluar: {e}")
-            continue
-        if dispara:
-            return ResultadoInferencia(
-                regla=regla,
-                accion=regla.accion,
-                explicacion=regla.descripcion,
-                hechos=hechos,
-            )
+    for regla in sorted(REGLAS, key=lambda r: (-r.prioridad, r.id)):
+        if regla.condiciones(hechos):
+            return ResultadoInferencia(regla, regla.accion, hechos)
 
-    return ResultadoInferencia(
-        regla=None,
-        accion="sin_regla",
-        explicacion="Ninguna regla de la base de conocimiento coincidió con los hechos.",
-        hechos=hechos,
-    )
+    return ResultadoInferencia(None, "sin_regla", hechos)
 
 
-def _accion_reproducir_youtube(hechos: HechosComando, hablar: Hablar) -> None:
-    ejecutar_reproducir_youtube(hechos.objeto, hablar)
+# Cada clave es el nombre de accion que pusiste en reglas.py
+def _reproducir(h: HechosComando, hablar: Hablar) -> None:
+    ejecutar_reproducir_youtube(h.objeto, hablar)
 
 
-def _accion_buscar_google(hechos: HechosComando, hablar: Hablar) -> None:
-    ejecutar_busqueda_google(hechos.objeto, hablar)
+def _buscar(h: HechosComando, hablar: Hablar) -> None:
+    ejecutar_busqueda_google(h.objeto, hablar)
 
 
-def _accion_abrir_aplicacion(hechos: HechosComando, hablar: Hablar) -> None:
-    assert hechos.alias_app is not None
-    ejecutar_abrir_aplicacion(hechos.alias_app, hablar)
+def _abrir(h: HechosComando, hablar: Hablar) -> None:
+    ejecutar_abrir_aplicacion(h.alias_app or "", hablar)
 
 
-def _accion_pedir_aplicacion(hechos: HechosComando, hablar: Hablar) -> None:
+def _pedir_app(h: HechosComando, hablar: Hablar) -> None:
     print("Di: notepad, word, edge o documento.")
-    hablar("Di qué aplicación abrir: bloc de notas, Word o Edge.")
+    hablar("Di que aplicacion abrir: bloc de notas, Word o Edge.")
 
 
-def _accion_verbo_sin_accion(hechos: HechosComando, hablar: Hablar) -> None:
-    hablar(
-        f"Entendí el verbo {hechos.verbo}, pero no hay una regla de acción "
-        "definida para él en la base de conocimiento."
-    )
+def _sin_accion(h: HechosComando, hablar: Hablar) -> None:
+    hablar(f"Entendi «{h.verbo}», pero no hay regla de accion para ese verbo.")
 
 
-def _accion_error_sintactico(hechos: HechosComando, hablar: Hablar) -> None:
-    msg = hechos.mensaje_error_sintactico or "Esa frase no coincide con la gramática."
-    print(f"(Sintaxis) [{hechos.codigo_error_sintactico}] {msg}")
+def _error_sintaxis(h: HechosComando, hablar: Hablar) -> None:
+    msg = h.mensaje_error_sintactico or "Esa frase no coincide con la gramatica."
+    print(f"(Sintaxis) [{h.codigo_error_sintactico}] {msg}")
     hablar(msg)
 
 
-def _accion_sin_regla(hechos: HechosComando, hablar: Hablar) -> None:
-    hablar("No encontré una regla que aplique a tu petición.")
+def _sin_regla(h: HechosComando, hablar: Hablar) -> None:
+    hablar("No encontre una regla que aplique a tu peticion.")
 
 
-# Tabla acción → función. Los estudiantes registran aquí acciones nuevas.
 ACCIONES: dict[str, Callable[[HechosComando, Hablar], None]] = {
-    "reproducir_youtube": _accion_reproducir_youtube,
-    "buscar_google": _accion_buscar_google,
-    "abrir_aplicacion": _accion_abrir_aplicacion,
-    "pedir_aplicacion": _accion_pedir_aplicacion,
-    "verbo_sin_accion": _accion_verbo_sin_accion,
-    "error_sintactico": _accion_error_sintactico,
-    "sin_regla": _accion_sin_regla,
+    "reproducir_youtube": _reproducir,
+    "buscar_google": _buscar,
+    "abrir_aplicacion": _abrir,
+    "pedir_aplicacion": _pedir_app,
+    "verbo_sin_accion": _sin_accion,
+    "error_sintactico": _error_sintaxis,
+    "sin_regla": _sin_regla,
 }
 
 
 def ejecutar_resultado(resultado: ResultadoInferencia, hablar: Hablar) -> None:
-    """Aplica el efecto de la acción inferida (TTS + lado del sistema)."""
-    if MOSTRAR_HECHOS_INFERENCIA:
-        print("\n--- Base de hechos (petición actual) ---")
+    if MOSTRAR_HECHOS:
+        print("\n--- Hechos ---")
         print(resultado.hechos.resumen())
         if resultado.regla:
-            print(f"  regla disparada = {resultado.regla.id}")
-        print(f"  acción          = {resultado.accion}")
-        print("--- fin hechos ---\n")
+            print(f"  regla = {resultado.regla.id}")
+        print(f"  accion = {resultado.accion}")
+        print("---\n")
 
     fn = ACCIONES.get(resultado.accion)
     if fn is None:
-        hablar(f"La acción «{resultado.accion}» no está registrada en el motor.")
-        print(f"[motor] Acción desconocida: {resultado.accion}")
+        hablar(f"La accion «{resultado.accion}» no esta registrada.")
         return
     fn(resultado.hechos, hablar)
