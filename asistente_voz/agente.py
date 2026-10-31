@@ -1,22 +1,25 @@
-"""Bucle del asistente: escucha o lee texto, pasa la gramática y ejecuta acciones."""
+"""Bucle del asistente: percibir → analizar (CFG) → inferir (experto) → actuar.
+
+Ya no despacha con if/elif por verbo: tras un parse válido, la *base de hechos*
+y el *motor de inferencia* eligen la regla SI … ENTONCES …
+(ver ``asistente_voz/experto/``).
+"""
 
 from __future__ import annotations
 
-# Ciclo percibir → interpretar → actuar.
-# Si quieres un comando nuevo: (1) amplía la CFG en gramatica.py y VERBOS/WAKE en config.py alineados;
-# (2) pon la lógica en acciones.py si conviene reutilizar; (3) aquí en procesar_comando agrega un elif
-# con el verbo y llama a tu función (igual que reproduce / busca / abre).
-
 import time
 
-from asistente_voz.acciones import (
-    detectar_alias_app_en_tokens,
-    ejecutar_abrir_aplicacion,
-    ejecutar_busqueda_google,
-    ejecutar_reproducir_youtube,
+from asistente_voz.config import (
+    LISTAR_REGLAS_AL_INICIO,
+    POST_WELCOME_SILENCE_S,
+    VERBOS,
+    WAKE_WORDS,
+    env_si,
 )
-from asistente_voz.config import POST_WELCOME_SILENCE_S, VERBOS, WAKE_WORDS, env_si
-from asistente_voz.gramatica import comando_valido_según_gramatica
+from asistente_voz.experto.hechos import hechos_desde_analisis
+from asistente_voz.experto.motor import ejecutar_resultado, inferir
+from asistente_voz.experto.reglas import listar_reglas
+from asistente_voz.gramatica import analizar_comando
 from asistente_voz.texto import normalize, poner_wake_word_primera, tokenizar
 from asistente_voz.voz_stt import ReconocimientoVoz
 from asistente_voz.voz_tts import GeneradorVoz
@@ -33,16 +36,6 @@ def _mostrar_transcripcion(raw: str, voz: GeneradorVoz | None) -> None:
         voz.generar_voz(f"He escuchado: {eco}")
 
 
-def _verbo_y_resto(tokens: list[str]) -> tuple[str | None, list[str]]:
-    # Tras la wake word, el verbo es la primera palabra que coincida con VERBOS (config.py).
-    if len(tokens) < 2:
-        return None, []
-    for i, tok in enumerate(tokens[1:], start=1):
-        if tok in VERBOS:
-            return tok, tokens[i + 1 :]
-    return None, []
-
-
 def procesar_comando(comando_normalizado: str, generador_voz: GeneradorVoz) -> None:
     tokens = poner_wake_word_primera(
         tokenizar(comando_normalizado), WAKE_WORDS, verbos=VERBOS
@@ -50,42 +43,18 @@ def procesar_comando(comando_normalizado: str, generador_voz: GeneradorVoz) -> N
     if not tokens:
         return
 
-    if tokens[0] not in WAKE_WORDS:
-        muestra = " ".join(tokens[:12]) + ("…" if len(tokens) > 12 else "")
-        print(f"(Falta Alexa/Siri/Google/Cortana al inicio. Transcripción: {muestra})")
-        generador_voz.generar_voz(
-            "Inicia el comando con Alexa, Siri, Google o Cortana."
-        )
-        return
-
-    if not comando_valido_según_gramatica(tokens):
-        print("Esa frase no cuadra con la gramática.")
-        generador_voz.generar_voz(
-            "Esa frase no coincide con la gramática que programamos."
-        )
-        return
-
-    verbo, cola = _verbo_y_resto(tokens)
-    if verbo is None:
-        generador_voz.generar_voz("No encontré un verbo de acción en tu comando.")
-        return
+    # 1) Analizador sintáctico (CFG)
+    analisis = analizar_comando(tokens)
+    # 2) Base de hechos a partir del árbol / diagnóstico
+    hechos = hechos_desde_analisis(analisis)
+    # 3) Motor de inferencia (reglas de producción)
+    resultado = inferir(hechos)
 
     def hablar(msg: str) -> None:
         generador_voz.generar_voz(msg)
 
-    if verbo in ("reproduce", "reproducir"):
-        ejecutar_reproducir_youtube(" ".join(cola), hablar)
-    elif verbo in ("busca", "buscar"):
-        ejecutar_busqueda_google(" ".join(cola), hablar)
-    elif verbo in ("abre", "abrir", "inicia"):
-        alias = detectar_alias_app_en_tokens(cola)
-        if alias is None:
-            print("Di: notepad, word, edge o documento.")
-            hablar("Di qué aplicación abrir: bloc de notas, Word o Edge.")
-        else:
-            ejecutar_abrir_aplicacion(alias, hablar)
-    else:
-        hablar("No tengo una acción definida para ese verbo todavía.")
+    # 4) Ejecutar la acción inferida (o el mensaje de error sintáctico)
+    ejecutar_resultado(resultado, hablar)
 
 
 def _entrada_texto() -> str:
@@ -101,12 +70,19 @@ def main() -> None:
     generador = GeneradorVoz()
     escucha = None if modo_texto else ReconocimientoVoz()
 
+    if LISTAR_REGLAS_AL_INICIO:
+        listar_reglas()
+
     generador.generar_voz("Asistente listo. Di un comando.")
     if not modo_texto and POST_WELCOME_SILENCE_S > 0:
         time.sleep(POST_WELCOME_SILENCE_S)
     print("Ctrl+C para salir.")
     if modo_texto:
         print("(Modo texto: ASISTENTE_TEXTO=1)")
+    print(
+        "Pipeline: STT/texto → CFG (árbol) → hechos → reglas → acción → TTS. "
+        "Oculta árbol/hechos con ASISTENTE_OCULTAR_ARBOL=1 o ASISTENTE_OCULTAR_HECHOS=1."
+    )
 
     try:
         while True:

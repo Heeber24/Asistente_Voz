@@ -1,7 +1,9 @@
 """
-Ajustes del asistente: idioma, micrófono, STT, TTS, rutas de programas en Windows.
+Ajustes del asistente: idioma, micrófono, STT, TTS, rutas y léxico de la CFG.
 
-Si cambias la gramática (gramatica.py), mantén alineados WAKE_WORDS y VERBOS con las reglas V y AV.
+Si cambias WAKE_WORDS, VERBOS, APPS_LEXICO o DETERMINANTES, la gramática en
+``gramatica.py`` se regenera sola a partir de estos conjuntos.
+Las acciones de dominio viven en ``experto/reglas.py`` + ``experto/motor.py``.
 """
 
 from __future__ import annotations
@@ -58,14 +60,31 @@ STT_DEBUG: bool = env_si("ASISTENTE_DEBUG_STT")
 POST_WELCOME_SILENCE_S: float = _env_float("ASISTENTE_SILENCIO_TRAS_BIENVENIDA_S", 0.0)
 PRE_LISTEN_SILENCE_S: float = _env_float("ASISTENTE_SILENCIO_ANTES_ESCUCHAR_S", 0.0)
 
-# En esta parte se debe poner el índice del micrófono que se va a usar. En este caso se usa el micrófono Brio por motivos de calidad de audio.
-# Desde la raíz del proyecto (con el venv ya creado):
-#   .venv\Scripts\python.exe -c "import speech_recognition as sr; [print(i, '-', n) for i, n in enumerate(sr.Microphone.list_microphone_names())]"
-# 0 - Microphone (Realtek High Definition Audio)
-# 1 - Microphone (Realtek High Definition Audio)
-# 2 - Microphone (Realtek High Definition Audio)
-# 3 - Microphone (Brio)
-MIC_DEVICE_INDEX_OVERRIDE: int | None = 3
+def _env_flag(nombre: str, default: bool = True) -> bool:
+    """Lee 1/0/true/false; si la variable no existe, usa default."""
+    raw = os.environ.get(nombre)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+# Demo didáctica: árbol CFG y hechos/regla disparada en consola.
+# ASISTENTE_MOSTRAR_ARBOL=0 / ASISTENTE_MOSTRAR_HECHOS=0 para silenciarlos.
+# ASISTENTE_OCULTAR_ARBOL=1 / ASISTENTE_OCULTAR_HECHOS=1 también ocultan.
+MOSTRAR_ARBOL_PARSE: bool = _env_flag("ASISTENTE_MOSTRAR_ARBOL", True) and not env_si(
+    "ASISTENTE_OCULTAR_ARBOL"
+)
+MOSTRAR_HECHOS_INFERENCIA: bool = _env_flag("ASISTENTE_MOSTRAR_HECHOS", True) and not env_si(
+    "ASISTENTE_OCULTAR_HECHOS"
+)
+# Al arrancar, listar reglas de la base de conocimiento (ASISTENTE_LISTAR_REGLAS=0 para no).
+LISTAR_REGLAS_AL_INICIO: bool = _env_flag("ASISTENTE_LISTAR_REGLAS", True)
+
+# Índice de micrófono. None = entrada por defecto del sistema.
+# Lista dispositivos:
+#   python -c "import speech_recognition as sr; [print(i, '-', n) for i, n in enumerate(sr.Microphone.list_microphone_names())]"
+# Luego fija ASISTENTE_MIC_INDEX o MIC_DEVICE_INDEX_OVERRIDE.
+MIC_DEVICE_INDEX_OVERRIDE: int | None = None
 
 _mic_raw = os.environ.get("ASISTENTE_MIC_INDEX", "").strip()
 if _mic_raw:
@@ -77,12 +96,13 @@ if _mic_raw:
 else:
     MIC_DEVICE_INDEX = MIC_DEVICE_INDEX_OVERRIDE
 
-# Palabras de activación y verbos permitidos: deben coincidir con la gramática en gramatica.py (AV y V).
+# ---------------------------------------------------------------------------
+# Léxico alineado con la CFG (gramatica.py lo lee para armar producciones).
+# ---------------------------------------------------------------------------
 WAKE_WORDS: frozenset[str] = frozenset({"alexa", "siri", "google", "cortana"})
+
 VERBOS: frozenset[str] = frozenset(
     {
-        "canta",
-        "escribe",
         "reproduce",
         "reproducir",
         "busca",
@@ -92,6 +112,16 @@ VERBOS: frozenset[str] = frozenset(
         "inicia",
     }
 )
+
+# Verbos cuya cola libre NO se enumera en la CFG: se resume como __objeto__.
+VERBOS_OBJETO_ABIERTO: frozenset[str] = frozenset(
+    {"reproduce", "reproducir", "busca", "buscar"}
+)
+
+# Sustantivos del léxico cerrado (comandos "abre …").
+APPS_LEXICO: frozenset[str] = frozenset({"notepad", "word", "edge", "documento"})
+
+DETERMINANTES: frozenset[str] = frozenset({"el", "la", "los", "las", "al"})
 
 
 def _windows_root() -> Path:
@@ -121,7 +151,7 @@ def _first_existing(paths: list[Path]) -> Path | None:
 
 
 def resolver_ruta_aplicacion(alias: str) -> Path | None:
-    """Devuelve la ruta al .exe si existe (notepad, word, documento, edge). Si Edge/Word están en otra carpeta, agrega rutas en _candidates_*."""
+    """Devuelve la ruta al .exe si existe (notepad, word, documento, edge). Si Edge/Word van en otra carpeta, agrega rutas en _candidates_*."""
     alias = alias.lower()
     if alias == "notepad":
         p = _windows_root() / "System32" / "notepad.exe"

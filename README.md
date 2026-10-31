@@ -20,13 +20,14 @@ Sirve para:
 
 ## Cómo funciona (visión general)
 
-El flujo sigue el esquema clásico **percibir → interpretar → actuar**:
+El flujo sigue el esquema de un **asistente clásico / sistema experto** (sin LLM):
 
-1. **Percibir**: se captura audio del micrófono (o se escribe un comando en consola) y se obtiene texto mediante reconocimiento automático del habla.
-2. **Interpretar**: el texto se normaliza (minúsculas, sin acentos), se divide en palabras (*tokens*) y se comprueba si la secuencia encaja en una **gramática** definida en el código. Así se evita ejecutar frases mal formadas.
-3. **Actuar**: si la frase es válida, según el verbo se llama a funciones que abren el navegador, lanzan un `.exe` o generan mensajes de voz.
+1. **Percibir**: audio del micrófono (o texto en consola) → reconocimiento del habla → texto.
+2. **Analizar (CFG)**: se normaliza, se tokeniza y un **analizador sintáctico** (gramática libre de contexto con NLTK `ChartParser`) acepta o rechaza la frase. Si es válida, se imprime el **árbol sintáctico** para ver cómo el parser estructura la orden.
+3. **Inferir (experto)**: el resultado del parseo se convierte en **hechos** (`experto/hechos.py`). Un **motor de inferencia** evalúa **reglas de producción** del tipo *SI parse válido Y verbo = X Y objeto cumple Y ENTONCES acción Z* (`experto/reglas.py` + `experto/motor.py`).
+4. **Actuar**: solo entonces se ejecutan efectos (YouTube, Google, abrir apps) y se responde por **voz sintética**.
 
-La voz de respuesta confirma lo que va a hacer el sistema y guía al usuario si falta información (por ejemplo, no se dijo qué buscar).
+Si el parse falla, **no** se inventa una respuesta: se explica el error (falta wake word, verbo desconocido, fuera de gramática, etc.). Eso es deliberado: modela un sistema con reglas rígidas, frente a un asistente basado en LLM.
 
 ---
 
@@ -38,11 +39,20 @@ La voz de respuesta confirma lo que va a hacer el sistema y guía al usuario si 
 - **Idioma**: por defecto `es-MX`; se puede cambiar con variable de entorno o en `asistente_voz/config.py` (`LANGUAGE_STT`). Códigos típicos: `es-ES`, `es-MX`, `en-US`, etc. (los que soporte el proveedor).
 - **Micrófono**: el índice del dispositivo se configura en `config.py` (comentarios en ese archivo explican cómo listar micrófonos con un comando de Python). También puedes fijar `ASISTENTE_MIC_INDEX` sin tocar el código.
 
-### Gramática (validación de la frase)
+### Gramática (análisis sintáctico)
 
-- **Librería**: [NLTK](https://www.nltk.org/) con una **gramática libre de contexto (CFG)** escrita como texto en `asistente_voz/gramatica.py`.
-- **Idea**: las órdenes válidas tienen una estructura fija, por ejemplo *palabra de activación* + *verbo* + *complemento*. La CFG describe patrones como “Alexa reproduce …” o “Google abre el notepad”.
-- **Consultas abiertas** (canción, término de búsqueda): no se listan todas las frases posibles en la gramática; para verbos como `reproduce` o `busca`, la cola de palabras se sustituye internamente por un comodín (`__objeto__`) y el analizador solo comprueba que haya “algo” después del verbo. Para `abre`, los nombres de aplicación sí van como reglas concretas en la gramática (alineadas con `acciones.py` y `config.py`).
+- **Librería**: [NLTK](https://www.nltk.org/) con una **CFG** armada desde `config.py` (wake words, verbos, apps, determinantes) en `asistente_voz/gramatica.py`.
+- **Idea**: *palabra de activación* + *verbo* + *complemento*. Tras un parse correcto verás en consola el **árbol sintáctico**.
+- **Consultas abiertas** (`reproduce` / `busca`): la cola se resume en el comodín `__objeto__` (no se enumera cada canción en la CFG).
+- **Léxico cerrado** (`abre`): apps en `APPS_LEXICO` (`notepad`, `word`, `edge`, `documento`).
+- En clase: ampliar terminales en `config.py` o producciones en `_producciones_extra()` dentro de `gramatica.py`.
+
+### Sistema experto (hechos + reglas + motor)
+
+- `asistente_voz/experto/hechos.py` — hechos de la petición actual (wake, verbo, objeto, alias de app, …).
+- `asistente_voz/experto/reglas.py` — reglas SI … ENTONCES … (aquí añaden más los estudiantes).
+- `asistente_voz/experto/motor.py` — elige la regla de mayor prioridad y ejecuta la acción registrada.
+- Prueba sin micrófono: `python scripts/probar_experto.py`.
 
 ### Síntesis de voz (respuesta hablada)
 
@@ -207,6 +217,9 @@ Muchas claves tienen un valor por defecto en código; las variables permiten pro
 | `ASISTENTE_TTS_VOZ_ES` | `1` intenta seleccionar una voz en español si existe. |
 | `ASISTENTE_DEBUG_STT` | `1` imprime información extra del reconocimiento. |
 | `ASISTENTE_REPETIR_STT_VOZ` | `1` hace que el asistente repita por voz lo que entendió (útil para depurar). |
+| `ASISTENTE_MOSTRAR_ARBOL` | `0` oculta el árbol sintáctico en consola (por defecto se muestra). |
+| `ASISTENTE_MOSTRAR_HECHOS` | `0` oculta hechos + regla disparada (por defecto se muestran). |
+| `ASISTENTE_LISTAR_REGLAS` | `0` no lista las reglas al arrancar (por defecto sí). |
 
 La lista completa de ajustes finos está documentada con comentarios en `config.py`, `voz_stt.py` y `voz_tts.py`.
 
@@ -216,24 +229,32 @@ La lista completa de ajustes finos está documentada con comentarios en `config.
 
 ```
 Asistente_Voz/
-├── asistente_voz/           # Código del asistente (paquete Python)
-│   ├── agente.py            # Bucle principal: escucha/lee, valida, despacha acciones
-│   ├── config.py            # Parámetros y rutas (mic, STT, TTS, verbos, aplicaciones)
-│   ├── gramatica.py         # CFG NLTK y comprobación de validez de la frase
-│   ├── texto.py             # Normalización de texto y orden de tokens
-│   ├── voz_stt.py           # Micrófono + reconocimiento (SpeechRecognition / Google)
-│   ├── voz_tts.py           # Síntesis de voz (SAPI / pyttsx3)
-│   └── acciones.py          # YouTube, Google, apertura de programas
+├── asistente_voz/                 # Paquete del asistente de voz
+│   ├── agente.py                  # Percibir → CFG → experto → actuar
+│   ├── config.py                  # Léxico CFG, mic, STT, TTS, rutas de apps
+│   ├── gramatica.py               # CFG NLTK, árbol sintáctico, errores de parseo
+│   ├── texto.py                   # Normalización y tokens
+│   ├── voz_stt.py / voz_tts.py    # Entrada / salida de voz
+│   ├── acciones.py                # Efectos: YouTube, Google, programas
+│   └── experto/                   # Sistema experto de peticiones
+│       ├── hechos.py              # Base de hechos (memoria de trabajo)
+│       ├── reglas.py              # Reglas de producción (ampliar aquí)
+│       └── motor.py               # Motor de inferencia + tabla de acciones
+├── scripts/
+│   └── probar_experto.py          # Casos de prueba CFG → inferencia
 ├── requirements.txt
 ├── README.md
-├── Asistente_Voz_IA.py      # Punto de entrada recomendado
-└── Base_Hechos.py               # Sistema experto por rasgos (animales); independiente del asistente de voz
+├── Asistente_Voz_IA.py            # Punto de entrada
+├── Base_Hechos.py                 # Otro ejemplo (animales); independiente
+└── Presentación_Introductoria_IA.pdf
 ```
 
-Para **ampliar** el asistente suele bastar con:
+Para **ampliar** el asistente en clase:
 
-1. Añadir reglas y vocabulario en `gramatica.py` y los mismos tokens en `VERBOS` / `WAKE_WORDS` en `config.py`.
-2. Implementar la lógica nueva en `acciones.py` (o en otro módulo tuyo) y enlazar el verbo en `agente.py` dentro de `procesar_comando`.
+1. **Léxico / CFG**: `WAKE_WORDS`, `VERBOS`, `APPS_LEXICO` en `config.py` (la gramática se regenera sola).
+2. **Regla nueva**: añade un `Regla(...)` en `experto/reglas.py`.
+3. **Acción nueva**: impleméntala en `acciones.py` (si aplica) y regístrala en `experto/motor.py` → `ACCIONES`.
+4. No hace falta tocar `if/elif` en `agente.py`: el motor elige la regla.
 
 ---
 
@@ -251,4 +272,5 @@ El audio del micrófono se envía al proveedor de reconocimiento configurado (Go
 | No escucha o escucha el mic equivocado | `ASISTENTE_LISTAR_MICS=1` y ajusta índice en `config.py` o `ASISTENTE_MIC_INDEX`. |
 | Sin respuesta de voz en Windows | Instala `pywin32` o fuerza `ASISTENTE_TTS_PYTTSX3=1`. |
 | “No entendió” o timeout | Ruido de fondo, `ASISTENTE_ESCUCHA_TIMEOUT`, `ASISTENTE_FRASE_MAX_S` o umbral de energía en `config.py`. |
-| Gramática rechaza la frase | Orden de palabras, palabra de activación al inicio (tras normalización), verbo en `VERBOS` y reglas en `gramatica.py`. |
+| Gramática rechaza la frase | Lee el mensaje de error en consola/voz (`FALTA_WAKE`, `SIN_VERBO`, `OBJETO_VACIO`, `FUERA_DE_GRAMATICA`). Revisa `VERBOS` / `APPS_LEXICO` en `config.py`. |
+| Parse OK pero “no hay regla” | Añade o ajusta una `Regla` en `experto/reglas.py` y registra la acción en `experto/motor.py`. |
