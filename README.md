@@ -142,12 +142,6 @@ La carpeta raíz debe ser la del repositorio (donde está `Asistente_Voz_IA.py`)
 python Asistente_Voz_IA.py
 ```
 
-### Probar gramática y reglas (sin micrófono ni TTS)
-
-```powershell
-python scripts/probar_experto.py
-```
-
 ### Modo solo texto (sin micrófono)
 
 Útil en entornos ruidosos, sin permisos de micrófono o para depurar la gramática y las acciones:
@@ -237,8 +231,6 @@ Asistente_Voz/
 │       ├── hechos.py           # Base de hechos (memoria de trabajo)
 │       ├── reglas.py           # Reglas de producción (ampliar aquí)
 │       └── motor.py            # Motor de inferencia + tabla de acciones
-├── scripts/
-│   └── probar_experto.py       # Casos de prueba CFG → inferencia
 ├── Asistente_Voz_IA.py         # Punto de entrada
 ├── requirements.txt
 └── README.md
